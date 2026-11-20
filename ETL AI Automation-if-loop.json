@@ -1,0 +1,281 @@
+{
+  "name": "ETL AI Automation-if-loop",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "File Upload",
+        "formDescription": "Upload the student data",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "File Upload",
+              "fieldType": "file"
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -368,
+        -32
+      ],
+      "id": "8033ed3d-5692-43cf-b7e1-a51029e61df2",
+      "name": "On form submission",
+      "webhookId": "ad578f84-7a6c-48dd-ae63-dd36cca9a180"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "File_Upload",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        -144,
+        -32
+      ],
+      "id": "57fcc79f-d2b5-4639-99e7-bb7230fe2f90",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Plaintext\n\nClean this student enrollment row and return ONLY a JSON object.\n\nRow data: {{ JSON.stringify($json) }}\n\nRules:\n- Name: Title Case (Manoj K)\n- Email: if invalid set INVALID_EMAIL\n- Phone: if less than 10 digits set MISSING\n- Course: only Python or Machine Learning or Data Science\n- Fee_Paid: yes/YES = true, no/NO = false\n- City: Title Case, empty = UNKNOWN\n- Enrolled_Date: convert to YYYY-MM-DD\n\nReturn ONLY raw JSON. No explanation. No markdown.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        80,
+        -32
+      ],
+      "id": "d9ecc90f-78e0-4c97-89a6-427be2f35494",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        16,
+        176
+      ],
+      "id": "44f4d9ae-0b02-4b0f-a639-e6e714cf0301",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "e4y3LyG1SJsA26UP",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\nconst cleanedData = [];\n\nfor (const item of items) {\n    try {\n        // Parse JSON string from AI output\n        let rawData = item.json.text;\n\n        // Remove Markdown code blocks if AI generates them\n        rawData = rawData\n            .replace(/```json/gi, \"\")\n            .replace(/```/g, \"\")\n            .trim();\n\n        const data = JSON.parse(rawData);\n\n        // Clean and standardize fields\n        const cleaned = {\n            Student_ID: String(data.Student_ID || \"\").trim(),\n            Name: String(data.Name || \"\").trim(),\n            Email: String(data.Email || \"\").trim().toLowerCase(),\n            Phone: String(data.Phone || \"\").trim(),\n            Course: String(data.Course || \"\").trim(),\n            Fee_Paid: data.Fee_Paid === true || data.Fee_Paid === \"true\",\n            City: String(data.City || \"\").trim(),\n            Enrolled_Date: String(data.Enrolled_Date || \"\").trim()\n        };\n\n        // Validate email\n        const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n        if (!emailRegex.test(cleaned.Email)) {\n            cleaned.Email = \"\";\n        }\n\n        // Validate phone number (10 digits)\n        if (!/^\\d{10}$/.test(cleaned.Phone)) {\n            cleaned.Phone = \"\";\n        }\n\n        // Validate date (YYYY-MM-DD)\n        const dateRegex = /^\\d{4}-\\d{2}-\\d{2}$/;\n        if (!dateRegex.test(cleaned.Enrolled_Date) ||\n            isNaN(Date.parse(cleaned.Enrolled_Date))) {\n            cleaned.Enrolled_Date = \"\";\n        }\n\n        cleanedData.push({\n            json: cleaned\n        });\n\n    } catch (error) {\n        // Skip invalid JSON records\n        cleanedData.push({\n            json: {\n                error: \"JSON parsing failed\",\n                original_data: item.json.text,\n                details: error.message\n            }\n        });\n    }\n}\n\nreturn cleanedData;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        16
+      ],
+      "id": "041a16b5-e719-4092-8c4b-89b7fda465a1",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "1828722d-3cfe-4fc6-bc08-f912d4b9edf5",
+              "leftValue": "={{ $json.City }}",
+              "rightValue": "Chennai",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "07af9989-7c9e-441d-a2ab-56ea8ccb22f2",
+              "leftValue": "={{ $json.Email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "ca8f25a7-85f1-4520-84ed-e27938ed0e80",
+              "leftValue": "={{ $json.Phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        864,
+        -112
+      ],
+      "id": "4006e91a-1a50-4f95-8619-2eb33074ec3a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.2,
+      "position": [
+        1104,
+        -128
+      ],
+      "id": "696382a6-4c77-4cd1-808e-375bc892080a",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        -16
+      ],
+      "id": "acf511de-2fc8-4eb7-b451-d86b2f163b9c",
+      "name": "Loop Over Items"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "30f81caf-f6bb-471f-9895-deeeb531dde9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "08fa0d46daefc2a3eab9106f34c851a2c45a64314dda7c04a8bb1da34675a9d3"
+  },
+  "nodeGroups": [],
+  "id": "j1wxRnBjtwxy5WRm",
+  "tags": []
+}
